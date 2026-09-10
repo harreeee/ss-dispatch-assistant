@@ -1,0 +1,1 @@
+{"name":"ss-dispatch-assistant","version":"1.2.0","private":true,"type":"module","engines":{"node":"22.x"},"scripts":{"test":"node --test tests/*.test.mjs","dev":"node ops/dev-server.mjs","build":"node ops/build.mjs"},"dependencies":{"web-push":"3.6.7"}}

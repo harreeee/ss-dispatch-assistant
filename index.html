@@ -1,114 +1,41 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>S&S Dispatch Assistant</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#102b3a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="S&S Dispatch"><title>S&S Dispatch Assistant</title><link rel="stylesheet" href="/styles.css?v=1.2.0"><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icons/icon-192.png"></head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">S&S</div>
-        <div>
-          <strong>Dispatch Assistant</strong>
-          <small>Delivery Control</small>
-        </div>
-      </div>
-
-      <nav class="nav">
-        <button class="nav-item active" data-view="dashboard">Control Tower</button>
-        <button class="nav-item" data-view="drivers">Driver Status</button>
-        <button class="nav-item" data-view="orders">Orders</button>
-        <button class="nav-item" data-view="issues">Issues</button>
-        <button class="nav-item" data-view="ai">Ask AI</button>
-      </nav>
-
-      <div class="connection-card">
-        <div><span id="onfleetDot" class="dot pending"></span> Onfleet</div>
-        <strong id="onfleetState">CHECKING</strong>
-      </div>
-    </aside>
-
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <h1 id="pageTitle">Control Tower</h1>
-          <p id="pageSubtitle">Monitor delivery execution and driver risk.</p>
-        </div>
-        <div class="topbar-right">
-          <span class="live-pill">● LIVE</span>
-          <button id="refreshBtn" class="refresh-btn">Refresh</button>
-        </div>
-      </header>
-
-      <section id="dashboard" class="view active-view">
-        <div class="stats-grid">
-          <div class="stat-card"><span>Drivers</span><strong id="statTotal">—</strong><small>Total Onfleet drivers</small></div>
-          <div class="stat-card good"><span>Online</span><strong id="statOnline">—</strong><small>Currently on duty</small></div>
-          <div class="stat-card warn"><span>At Risk</span><strong id="statRisk">—</strong><small>May become late</small></div>
-          <div class="stat-card bad"><span>Late</span><strong id="statLate">—</strong><small>Needs attention</small></div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h2>Needs attention</h2>
-              <p>Drivers sorted by urgency. No order details shown here.</p>
-            </div>
-            <button class="link-btn" data-view-target="drivers">Open Driver Status →</button>
-          </div>
-          <div id="attentionList" class="attention-list"></div>
-        </div>
-      </section>
-
-      <section id="drivers" class="view">
-        <div class="driver-summary">
-          <div><span>Online</span><strong id="driverOnline">0</strong></div>
-          <div><span>Offline</span><strong id="driverOffline">0</strong></div>
-          <div><span>On Time</span><strong id="driverOnTime">0</strong></div>
-          <div><span>At Risk</span><strong id="driverAtRisk">0</strong></div>
-          <div><span>Late</span><strong id="driverLate">0</strong></div>
-        </div>
-
-        <div class="driver-toolbar">
-          <div class="segmented" id="driverFilter">
-            <button class="active" data-status="ALL">All</button>
-            <button data-status="LATE">Late</button>
-            <button data-status="AT_RISK">At Risk</button>
-            <button data-status="ON_TIME">On Time</button>
-            <button data-status="OFFLINE">Offline</button>
-          </div>
-          <input id="driverSearch" class="search" placeholder="Search driver…" />
-        </div>
-
-        <div id="driverList" class="driver-list"></div>
-      </section>
-
-      <section id="orders" class="view">
-        <div class="placeholder-card">
-          <h2>Orders</h2>
-          <p>Next step: connect the Google Delivery Sheet and match each row to Onfleet by date and Onfleet ID.</p>
-        </div>
-      </section>
-
-      <section id="issues" class="view">
-        <div class="placeholder-card">
-          <h2>Issues</h2>
-          <p>This will combine Missing, Late and At Risk order checks after the Google Sheet connection is added.</p>
-        </div>
-      </section>
-
-      <section id="ai" class="view">
-        <div class="placeholder-card">
-          <h2>AI Dispatcher</h2>
-          <p>AI chat will be added after Onfleet + Google Sheet data are stable, so its answers are grounded in real dispatch data.</p>
-        </div>
-      </section>
-    </main>
-  </div>
-
-  <script src="app.js"></script>
-</body>
-</html>
+ <section id="login" class="login hidden"><form id="loginForm" class="login-card"><span class="brand-icon">S&S</span><p class="eyebrow">PRIVATE WORKSPACE</p><h1>Dispatch Assistant</h1><p>Sign in to view delivery and driver information.</p><label for="password">Workspace password</label><input id="password" type="password" autocomplete="current-password" required><button class="primary" type="submit">Sign in</button><p id="loginError" class="error-text" role="alert"></p><small>Your Onfleet API key is never entered here.</small></form></section>
+ <div id="shell" class="shell hidden">
+  <aside class="sidebar"><div class="brand"><span class="brand-icon">S&S</span><div><b>Dispatch Assistant</b><small>Delivery control / v1.2</small></div></div><nav class="desktop-nav"><button data-view="dashboard" class="active">Overview</button><button data-view="drivers">Drivers</button><button data-view="orders">Orders</button><button data-view="settings">Notifications</button></nav><div class="sidebar-note">Start each pickup task<br><b>60 minutes before pickup.</b></div></aside>
+  <main>
+   <header class="topbar"><div><p class="eyebrow">S&S DISPATCH</p><h1 id="pageTitle">Today's overview</h1></div><button id="refreshBtn" class="icon-button" aria-label="Refresh data">Refresh</button></header>
+   <section class="datebar" aria-label="Delivery date"><div class="date-shortcuts"><button id="todayBtn" class="active">Today</button><button id="tomorrowBtn">Tomorrow</button></div><label for="datePicker" class="sr-only">Delivery date</label><input id="datePicker" type="date"><span class="timezone">Toronto time</span></section>
+   <div class="sourcebar"><span id="connectionState" class="source pending">Checking connection</span><span id="checkedAt">No data loaded</span></div>
+   <div id="globalError" class="notice error hidden" role="alert"></div><div id="warnings"></div>
+   <section id="dashboard" class="view">
+    <div class="metrics">
+     <button class="metric red" data-issue-filter="LATE"><span>Late tasks</span><b id="countLate">-</b><small>Past the deadline</small></button>
+     <button class="metric amber" data-issue-filter="NOT_STARTED"><span>Not started</span><b id="countStart">-</b><small>60-minute rule</small></button>
+     <button class="metric amber" data-issue-filter="SHEET_NOT_FOUND"><span>Missing candidates</span><b id="countMissing">-</b><small>Sheet vs Onfleet</small></button>
+     <button class="metric teal" data-issue-filter="ALL"><span>Moving + on time</span><b id="countMoving">-</b><small>Verified GPS + ETA</small></button>
+    </div>
+    <div class="section-title"><div><h2>Needs attention</h2><p id="attentionSubtitle">Only the selected delivery day.</p></div><span id="issueTotal" class="number-pill">-</span></div>
+    <div class="chips" id="issueFilters"><button class="active" data-kind="ALL">All</button><button data-kind="NOT_STARTED">Not started</button><button data-kind="LATE">Late</button><button data-kind="ETA_RISK">At risk</button><button data-kind="STATIONARY">Not moving</button><button data-kind="GPS_STALE">GPS unknown</button><button data-kind="SHEET_NOT_FOUND">Missing</button></div>
+    <div id="issueList" class="card-list" aria-live="polite"></div>
+   </section>
+   <section id="drivers" class="view hidden">
+    <div class="driver-intro"><h2>Who needs a check?</h2><p>Names and status only. Online presence is current.</p></div>
+    <div class="compact-counts"><span><b id="onlineCount">-</b> online now</span><span><b id="dayDriverCount">-</b> with tasks this day</span></div>
+    <label for="driverSearch" class="sr-only">Search driver</label><input id="driverSearch" class="search" type="search" placeholder="Search driver name">
+    <div class="chips" id="driverFilters"><button class="active" data-status="ALL">All</button><button data-status="ATTENTION">Needs attention</button><button data-status="ONLINE">Online</button><button data-status="ON_TIME">On time</button></div>
+    <div id="driverList" class="card-list" aria-live="polite"></div>
+   </section>
+   <section id="orders" class="view hidden"><div class="section-title"><div><h2>Order checks</h2><p id="sheetState">Google Sheet is not connected.</p></div></div><div id="sheetNotice" class="notice"></div><div id="sheetList" class="card-list"></div><div class="section-title"><div><h2>Onfleet tasks</h2><p>A pickup and a dropoff are separate tasks, not two orders.</p></div></div><div id="taskList" class="card-list"></div></section>
+   <section id="settings" class="view hidden">
+    <article class="panel"><p class="eyebrow">PHONE NOTIFICATIONS</p><h2>Alerts, even when the app is closed</h2><p>Install this app on your phone, then allow notifications.</p><div class="notice">iPhone: Safari &rarr; Share &rarr; Add to Home Screen. Open that icon before enabling notifications.<br>Android: install from the browser menu, then allow notifications.</div><p id="pushState" role="status">Checking push setup...</p><div class="button-stack"><button id="enablePush" class="primary">Enable phone alerts</button><button id="testPush">Send a test notification</button><button id="disablePush">Turn off this phone</button></div><small>No customer address or phone number is included on the lock screen.</small></article>
+    <article class="panel"><h2>Background checker</h2><p id="monitorState">Not verified.</p><p class="small">The checker must run on the server every minute. Browser auto-refresh is not background monitoring. OS permissions, connectivity and Focus mode can delay delivery.</p></article>
+    <article class="panel"><h2>The 60-minute rule</h2><p>Pickup 11:00 &rarr; Start required by 10:00.</p><p class="small">At the cutoff, an unstarted pickup raises Not started. A different active task does not satisfy this rule. Starting the correct task clears the alert on the next successful check. Start time is not inferred from online status or GPS movement.</p></article>
+    <article class="panel"><h2>Data safety</h2><p class="small">Read-only Onfleet and Google Sheets. Missing IDs, duplicate rows and missing ETA/GPS are marked for review, not treated as healthy.</p><button id="logoutBtn">Sign out</button></article>
+   </section>
+   <footer>Checked data, not guesses. <span id="version">v1.2.0</span></footer>
+  </main>
+  <nav class="bottom-nav" aria-label="Main navigation"><button class="active" data-view="dashboard"><span>Overview</span></button><button data-view="drivers"><span>Drivers</span></button><button data-view="orders"><span>Orders</span></button><button data-view="settings"><span>Alerts</span></button></nav>
+ </div><script type="module" src="/app.js?v=1.2.0"></script>
+</body></html>
