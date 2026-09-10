@@ -1,27 +1,19 @@
-# S&S Delivery Control — V1 Prototype
+# S&S Dispatch Assistant v1.1
 
-A zero-dependency front-end prototype for monitoring delivery operations across Google Sheets and Onfleet.
+Live Onfleet driver monitoring for S&S dispatch.
 
-## Current V1
-- Control Tower overview
-- PRE / DURING / POST lifecycle monitoring
-- Rule-based issue prioritization (OK / WATCH / ACTION)
-- Combined Orders view
-- Issues view with filters
-- AI Dispatcher demo chat using local sample data
-- Responsive desktop/mobile layout
-- Integration setup placeholder for Google Sheets and Onfleet
+## Required Vercel environment variable
 
-## Open locally
-Open `index.html` in any modern browser.
+- `ONFLEET_API_KEY`
 
-## Next integration phase
-1. Google Sheets API: read the Delivery Sheet and normalize planned orders.
-2. Onfleet API: read tasks/workers and map them using Order ID.
-3. Onfleet webhooks: receive assignment, ETA, delay, completion and failure events.
-4. Replace the demo `orders` array with merged live data.
-5. Add authenticated users and persistent issue history.
-6. Add OpenAI-powered natural-language chat after the live data layer is stable.
+## Driver status logic
 
-## Proposed core matching rule
-`Delivery Sheet Order ID` must match `Onfleet task shortId/metadata order ID`.
+- ONLINE/OFFLINE comes from Onfleet worker `onDuty`.
+- LATE if Onfleet worker/task `delayTime` is positive, or a task is already past `completeBefore`.
+- AT RISK if Onfleet predicts completion/arrival after the deadline, or within 10 minutes of it.
+- ON TIME otherwise.
+- A driver's displayed status is the worst status among currently assigned/active tasks.
+
+## Next step
+
+Connect the 2026 UPCOMING DELIVERIES Google Sheet for date-based Missing / Late / At Risk / On Time order checks.
