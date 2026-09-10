@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>S&S Delivery Control</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">S&S</div>
+        <div>
+          <strong>Delivery Control</strong>
+          <small>AI Dispatch Tower</small>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item active" data-view="control"><span>◫</span> Control Tower</button>
+        <button class="nav-item" data-view="orders"><span>▤</span> Orders</button>
+        <button class="nav-item" data-view="issues"><span>⚠</span> Issues <b id="navIssueCount">0</b></button>
+        <button class="nav-item" data-view="ai"><span>✦</span> Ask AI</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="connection-row"><span class="dot demo"></span><span>Google Sheet</span><em>DEMO</em></div>
+        <div class="connection-row"><span class="dot demo"></span><span>Onfleet</span><em>DEMO</em></div>
+        <button id="integrationBtn" class="integration-btn">Integration setup</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Control Tower</h1>
+          <p id="pageSubtitle">Monitor every order before, during and after delivery.</p>
+        </div>
+        <div class="topbar-actions">
+          <div class="live-pill"><span class="live-dot"></span> LIVE</div>
+          <div class="clock" id="clock"></div>
+        </div>
+      </header>
+
+      <section id="control" class="view active-view">
+        <div class="hero-grid">
+          <div class="stat-card primary">
+            <span>Today's orders</span>
+            <strong id="totalOrders">0</strong>
+            <small id="completedLine">0 completed</small>
+          </div>
+          <div class="stat-card ok">
+            <span>On track</span>
+            <strong id="okCount">0</strong>
+            <small>No action needed</small>
+          </div>
+          <div class="stat-card watch">
+            <span>Watch</span>
+            <strong id="watchCount">0</strong>
+            <small>Monitor closely</small>
+          </div>
+          <div class="stat-card danger">
+            <span>Action required</span>
+            <strong id="actionCount">0</strong>
+            <small>Dispatcher attention</small>
+          </div>
+        </div>
+
+        <div class="stage-grid">
+          <button class="stage-card" data-stage="PRE">
+            <div><span class="stage-icon pre">PRE</span><strong>Before delivery</strong></div>
+            <b id="preIssues">0 issues</b>
+            <small>Missing tasks, no driver, time mismatch</small>
+          </button>
+          <button class="stage-card" data-stage="DURING">
+            <div><span class="stage-icon during">LIVE</span><strong>During delivery</strong></div>
+            <b id="duringIssues">0 issues</b>
+            <small>Late ETA, pickup risk, failed task</small>
+          </button>
+          <button class="stage-card" data-stage="POST">
+            <div><span class="stage-icon post">POST</span><strong>After delivery</strong></div>
+            <b id="postIssues">0 issues</b>
+            <small>Late completion, status conflict, follow-up</small>
+          </button>
+        </div>
+
+        <div class="content-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Needs attention</h2>
+                <p>Only exceptions that may require dispatcher action.</p>
+              </div>
+              <button class="text-btn" data-view-target="issues">View all issues →</button>
+            </div>
+            <div id="priorityIssues" class="issue-list"></div>
+          </div>
+
+          <div class="panel compact-panel">
+            <div class="panel-header"><div><h2>Next 90 minutes</h2><p>Upcoming pickups and deliveries.</p></div></div>
+            <div id="upcomingList" class="timeline"></div>
+          </div>
+        </div>
+
+        <div class="ai-strip">
+          <div class="ai-symbol">✦</div>
+          <div>
+            <strong>Ask the AI Dispatcher</strong>
+            <span>Try: “Check lunch deliveries” or “What needs attention?”</span>
+          </div>
+          <button data-view-target="ai">Open AI →</button>
+        </div>
+      </section>
+
+      <section id="orders" class="view">
+        <div class="toolbar">
+          <div class="segmented" id="orderStageFilter">
+            <button class="active" data-filter="ALL">All</button>
+            <button data-filter="PRE">Pre</button>
+            <button data-filter="DURING">During</button>
+            <button data-filter="POST">Post</button>
+          </div>
+          <input id="orderSearch" class="search" placeholder="Search order, vendor or driver…" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Order</th><th>Vendor</th><th>Window</th><th>Driver</th><th>Stage</th><th>Sheet</th><th>Onfleet</th><th>Health</th></tr></thead>
+            <tbody id="ordersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="issues" class="view">
+        <div class="toolbar">
+          <div class="segmented" id="issueStageFilter">
+            <button class="active" data-filter="ALL">All issues</button>
+            <button data-filter="PRE">Pre</button>
+            <button data-filter="DURING">During</button>
+            <button data-filter="POST">Post</button>
+          </div>
+          <select id="severityFilter" class="select">
+            <option value="ALL">All severity</option>
+            <option value="ACTION">Action required</option>
+            <option value="WATCH">Watch</option>
+          </select>
+        </div>
+        <div id="issuesGrid" class="issues-grid"></div>
+      </section>
+
+      <section id="ai" class="view ai-view">
+        <div class="chat-panel">
+          <div class="chat-header">
+            <div class="ai-avatar">✦</div>
+            <div><h2>S&S AI Dispatcher</h2><p>Google Sheet + Onfleet control assistant</p></div>
+          </div>
+          <div id="chatMessages" class="chat-messages">
+            <div class="message assistant">
+              <div class="message-label">AI Dispatcher</div>
+              <div class="bubble">I’m ready. Ask me about today’s deliveries, missing Onfleet tasks, late orders, lunch deliveries, or anything that needs attention.</div>
+            </div>
+          </div>
+          <div class="quick-prompts" id="quickPrompts">
+            <button>What needs attention?</button>
+            <button>Check lunch deliveries</button>
+            <button>Anything missing from Onfleet?</button>
+            <button>Show late completed orders</button>
+          </div>
+          <form id="chatForm" class="chat-input-row">
+            <input id="chatInput" autocomplete="off" placeholder="Ask about deliveries…" />
+            <button type="submit">Send</button>
+          </form>
+        </div>
+        <aside class="ai-context">
+          <h3>Live context</h3>
+          <div class="context-card"><span>Orders today</span><strong id="contextOrders">0</strong></div>
+          <div class="context-card danger"><span>Action required</span><strong id="contextAction">0</strong></div>
+          <div class="context-card watch"><span>Watch</span><strong id="contextWatch">0</strong></div>
+          <div class="context-note">Demo mode uses sample orders. The same UI will read your real Sheet and Onfleet after connection.</div>
+        </aside>
+      </section>
+
+      <section id="integration" class="modal-backdrop hidden">
+        <div class="modal">
+          <button class="modal-close" id="modalClose">×</button>
+          <h2>Integration setup</h2>
+          <p>Version 1 is in demo mode. Real data will use these two connectors only.</p>
+          <div class="setup-step"><b>1</b><div><strong>Google Delivery Sheet</strong><span>Connect one Sheet and map Order ID, vendor, pickup time, delivery time, address, setup notes and planned status.</span></div></div>
+          <div class="setup-step"><b>2</b><div><strong>Onfleet</strong><span>Add an Onfleet API key and webhook endpoint for task events, ETA, assignments and completion.</span></div></div>
+          <div class="setup-step"><b>3</b><div><strong>Order matching</strong><span>The app matches Sheet rows to Onfleet tasks using the same Order ID.</span></div></div>
+          <button class="modal-primary" id="modalDone">Got it</button>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
