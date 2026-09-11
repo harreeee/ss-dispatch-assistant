@@ -6,11 +6,12 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function label(s){return String(s||'UNKNOWN').replaceAll('_',' ');}
 function time(ms){return ms?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'Unknown';}
 const badge=s=>`<span class="status ${/^[A-Z_]+$/.test(s)?s:'UNKNOWN'}">${esc(label(s))}</span>`;
-let data=null,selected=today(),followToday=true,view='dashboard',issueFilter='ALL',driverFilter='ALL',seq=0,pending=null;
+let data=null,selected=today(),followToday=true,view='dashboard',issueFilter='ALL',driverFilter='ALL',seq=0;
+let loading=false,queuedLoad=false,lastLoadStartedAt=0;
 let pushConfig={configured:false},registration=null;
 $('datePicker').value=selected;
 function display(viewName){view=viewName;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==view));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('pageTitle').textContent=({dashboard:selected===today()?"Today's overview":'Delivery overview',drivers:'Driver status',orders:'Order checks',settings:'Phone alerts'})[view];}
-function setDate(d,auto=false){if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;selected=d;followToday=auto;$('datePicker').value=d;$('todayBtn').classList.toggle('active',d===today());$('tomorrowBtn').classList.toggle('active',d===nextDay(today()));data=null;clearData();display(view);load();}
+function setDate(d,auto=false){if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;selected=d;followToday=auto;$('datePicker').value=d;$('todayBtn').classList.toggle('active',d===today());$('tomorrowBtn').classList.toggle('active',d===nextDay(today()));data=null;clearData();display(view);load({force:true});}
 function clearData(){for(const id of ['countLate','countStart','countMissing','countMoving','onlineCount','dayDriverCount','issueTotal'])$(id).textContent='-';for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Loading checked data...</div>';}
 async function request(path,options={}){const response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options});const type=response.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('The server API is not available. Check that api/ was uploaded and deployed.');const body=await response.json();if(response.status===401){showLogin();throw new Error('Session expired. Sign in again.');}if(!response.ok)throw new Error(body.error||`Request failed (${response.status})`);return body;}
 function render(){if(!data)return;
@@ -31,10 +32,26 @@ function renderOrders(){if(!data)return;const sheet=data.sheet||{};$('sheetState
  $('sheetList').innerHTML=(sheet.rows||[]).filter(r=>r.status!=='MATCHED').map(r=>`<article class="card"><div class="card-top"><b>Sheet row ${r.row}</b>${badge(r.status)}</div><p>${esc(r.vendor)} &middot; Pickup ${time(r.pickupAt)}</p><small>${r.status==='NOT_FOUND'?'Missing candidate. Confirm before creating a task.':'Review the row mapping; no automatic duplicate removal.'}</small></article>`).join('');
  $('taskList').innerHTML=data.tasks.length?data.tasks.map(t=>`<article class="card"><div class="card-top"><b>${esc(t.shortId)}</b>${badge(t.status)}</div><p>${esc(t.type)} &middot; ${esc(t.date)}<br>Pickup ${time(t.pickupAt)} &middot; Deadline ${time(t.deadlineAt)}</p>${t.startDueAt?`<small>Start required by ${time(t.startDueAt)}</small>`:''}</article>`).join(''):'<div class="empty">No dated Onfleet tasks were returned for this day.</div>';
 }
-async function load(){const mySeq=++seq;if(pending)pending.abort();pending=new AbortController();$('refreshBtn').disabled=true;$('connectionState').className='source pending';$('connectionState').textContent='Checking Onfleet';$('globalError').classList.add('hidden');
- try{const result=await request(`/api/onfleet?date=${encodeURIComponent(selected)}`,{signal:pending.signal});if(mySeq!==seq)return;if(result.version!=='1.2.0')throw new Error('Backend is still the old version. Upload the new api/ and lib/ folders together.');data=result;render();$('connectionState').className='source '+(data.complete?'good':'pending');$('connectionState').textContent=data.complete?'Onfleet checked':'Onfleet partial';$('checkedAt').textContent=`Updated ${time(data.checkedAt)}`;
- }catch(e){if(e.name==='AbortError'||mySeq!==seq)return;data=null;clearData();$('connectionState').className='source error';$('connectionState').textContent='Data unavailable';$('checkedAt').textContent='Status is unknown';$('globalError').textContent=e.message;$('globalError').classList.remove('hidden');for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Data unavailable. No on-time conclusion can be made.</div>';
- }finally{if(mySeq===seq)$('refreshBtn').disabled=false;}}
+async function load({force=false}={}){
+ const now=Date.now();
+ if(loading){queuedLoad=true;return;}
+ if(!force&&now-lastLoadStartedAt<15000)return;
+ loading=true;queuedLoad=false;lastLoadStartedAt=now;
+ const mySeq=++seq;const requestDate=selected;
+ $('refreshBtn').disabled=true;$('connectionState').className='source pending';$('connectionState').textContent='Checking Onfleet';$('globalError').classList.add('hidden');
+ try{
+  const result=await request(`/api/onfleet?date=${encodeURIComponent(requestDate)}`);
+  if(mySeq!==seq||requestDate!==selected)return;
+  if(result.version!=='1.2.0')throw new Error('Backend is still the old version. Upload the new api/ and lib/ folders together.');
+  data=result;render();$('connectionState').className='source '+(data.complete?'good':'pending');$('connectionState').textContent=data.complete?'Onfleet checked':'Onfleet partial';$('checkedAt').textContent=`Updated ${time(data.checkedAt)}`;
+ }catch(e){
+  if(mySeq!==seq||requestDate!==selected)return;
+  data=null;clearData();$('connectionState').className='source error';$('connectionState').textContent='Data unavailable';$('checkedAt').textContent='Status is unknown';$('globalError').textContent=e.message;$('globalError').classList.remove('hidden');for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Data unavailable. No on-time conclusion can be made.</div>';
+ }finally{
+  loading=false;$('refreshBtn').disabled=false;
+  if(queuedLoad){queuedLoad=false;setTimeout(()=>load(),500);}
+ }
+}
 function showLogin(){$('shell').classList.add('hidden');$('login').classList.remove('hidden');}
 async function initPush(){try{if('serviceWorker' in navigator){registration=await navigator.serviceWorker.register('/sw.js');}pushConfig=await request('/api/push');$('pushState').textContent=pushConfig.configured?'Server push is configured. Enable this phone and send a test.':'Phone push is not configured on the server yet.';$('enablePush').disabled=!pushConfig.configured;$('testPush').disabled=!pushConfig.configured;}catch(e){$('pushState').textContent=e.message;}}
 function keyBytes(s){const raw=atob(s.replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,c=>c.charCodeAt(0));}
@@ -43,7 +60,6 @@ async function pushAction(action,subscription){return request('/api/push',{metho
 $('enablePush').addEventListener('click',async()=>{try{
  if(!('Notification'in window)||!('PushManager'in window))throw new Error('Install the app to the Home Screen first, then reopen it.');
  if(!pushConfig.configured)throw new Error('Server push setup is required first.');
- // Permission request is tied directly to this user gesture (required on iOS).
  const permission=await Notification.requestPermission();if(permission!=='granted')throw new Error('Notifications are not allowed. Enable them in phone settings.');
  const reg=await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription()||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:keyBytes(pushConfig.publicKey)});
  await pushAction('subscribe',sub);$('pushState').textContent='This phone is subscribed. Send a test; background checks must also be active.';
@@ -51,12 +67,12 @@ $('enablePush').addEventListener('click',async()=>{try{
 $('testPush').addEventListener('click',async()=>{try{const sub=await deviceSubscription();if(!sub)throw new Error('Enable phone alerts first.');await pushAction('test',sub);$('pushState').textContent='Test accepted by the push service. Confirm that it appears on your phone; delivery is not yet verified.';}catch(e){$('pushState').textContent=e.message;}});
 $('disablePush').addEventListener('click',async()=>{try{const sub=await deviceSubscription();if(sub){await pushAction('unsubscribe',sub);await sub.unsubscribe();}$('pushState').textContent='Alerts are off on this phone.';}catch(e){$('pushState').textContent=e.message;}});
 $('logoutBtn').addEventListener('click',async()=>{let note='';try{const sub=await deviceSubscription();if(sub){try{await pushAction('unsubscribe',sub);}finally{await sub.unsubscribe();}}}catch{note='Signed out. Verify notifications are disabled in your phone settings.';}try{await request('/api/session',{method:'DELETE'});data=null;showLogin();$('loginError').textContent=note;}catch(e){$('pushState').textContent=e.message;}});
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{await request('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';$('loginError').textContent='';$('login').classList.add('hidden');$('shell').classList.remove('hidden');await load();await initPush();}catch(err){$('loginError').textContent=err.message;}});
-$('todayBtn').addEventListener('click',()=>setDate(today(),true));$('tomorrowBtn').addEventListener('click',()=>setDate(nextDay(today())));$('datePicker').addEventListener('change',e=>setDate(e.target.value));$('refreshBtn').addEventListener('click',load);$('driverSearch').addEventListener('input',renderDrivers);
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();try{await request('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('password').value})});$('password').value='';$('loginError').textContent='';$('login').classList.add('hidden');$('shell').classList.remove('hidden');await load({force:true});await initPush();}catch(err){$('loginError').textContent=err.message;}});
+$('todayBtn').addEventListener('click',()=>setDate(today(),true));$('tomorrowBtn').addEventListener('click',()=>setDate(nextDay(today())));$('datePicker').addEventListener('change',e=>setDate(e.target.value));$('refreshBtn').addEventListener('click',()=>load({force:true}));$('driverSearch').addEventListener('input',renderDrivers);
 for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>display(b.dataset.view));
 for(const b of document.querySelectorAll('#issueFilters button'))b.addEventListener('click',()=>{issueFilter=b.dataset.kind;document.querySelectorAll('#issueFilters button').forEach(x=>x.classList.toggle('active',x===b));renderIssues();});
 for(const b of document.querySelectorAll('[data-issue-filter]'))b.addEventListener('click',()=>{issueFilter=b.dataset.issueFilter;document.querySelectorAll('#issueFilters button').forEach(x=>x.classList.toggle('active',x.dataset.kind===issueFilter));renderIssues();});
 for(const b of document.querySelectorAll('#driverFilters button'))b.addEventListener('click',()=>{driverFilter=b.dataset.status;document.querySelectorAll('#driverFilters button').forEach(x=>x.classList.toggle('active',x===b));renderDrivers();});
 setInterval(()=>{if(document.hidden||$('shell').classList.contains('hidden'))return;if(followToday&&selected!==today())setDate(today(),true);else load();},60_000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('shell').classList.contains('hidden')){if(followToday&&selected!==today())setDate(today(),true);else load();}});
-try{const session=await request('/api/session');if(!session.authenticated){showLogin();if(!session.configured)$('loginError').textContent='One-time setup: add APP_ACCESS_PASSWORD (16+ random characters) in Vercel and redeploy.';}else{$('shell').classList.remove('hidden');const requested=new URLSearchParams(location.search).get('view');if(['dashboard','drivers','orders','settings'].includes(requested))display(requested);await load();await initPush();}}catch(e){showLogin();$('loginError').textContent=e.message;}
+try{const session=await request('/api/session');if(!session.authenticated){showLogin();if(!session.configured)$('loginError').textContent='One-time setup: add APP_ACCESS_PASSWORD (16+ random characters) in Vercel and redeploy.';}else{$('shell').classList.remove('hidden');const requested=new URLSearchParams(location.search).get('view');if(['dashboard','drivers','orders','settings'].includes(requested))display(requested);await load({force:true});await initPush();}}catch(e){showLogin();$('loginError').textContent=e.message;}
