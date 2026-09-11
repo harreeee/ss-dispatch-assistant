@@ -7,13 +7,27 @@ function label(s){return String(s||'UNKNOWN').replaceAll('_',' ');}
 function time(ms){return ms?new Intl.DateTimeFormat('en-CA',{timeZone:TZ,hour:'numeric',minute:'2-digit'}).format(new Date(ms)):'Unknown';}
 const badge=s=>`<span class="status ${/^[A-Z_]+$/.test(s)?s:'UNKNOWN'}">${esc(label(s))}</span>`;
 let data=null,selected=today(),followToday=true,view='dashboard',issueFilter='ALL',driverFilter='ALL',seq=0;
-let loading=false,queuedLoad=false,lastLoadStartedAt=0;
+let loading=false,queuedLoad=false,lastLoadStartedAt=0,lastLoadDate=null,activeDate=null;
+let retryNotBefore=0,refreshTimer=null;
 let pushConfig={configured:false},registration=null;
 $('datePicker').value=selected;
 function display(viewName){view=viewName;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==view));document.querySelectorAll('[data-view]').forEach(e=>e.classList.toggle('active',e.dataset.view===view));$('pageTitle').textContent=({dashboard:selected===today()?"Today's overview":'Delivery overview',drivers:'Driver status',orders:'Order checks',settings:'Phone alerts'})[view];}
 function setDate(d,auto=false){if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;selected=d;followToday=auto;$('datePicker').value=d;$('todayBtn').classList.toggle('active',d===today());$('tomorrowBtn').classList.toggle('active',d===nextDay(today()));data=null;clearData();display(view);load({force:true});}
 function clearData(){for(const id of ['countLate','countStart','countMissing','countMoving','onlineCount','dayDriverCount','issueTotal'])$(id).textContent='-';for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Loading checked data...</div>';}
-async function request(path,options={}){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);const signal=options.signal||controller.signal;let response;try{response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options,signal});}catch(e){if(e.name==='AbortError')throw new Error('Refresh timed out. Please try again.');throw e;}finally{clearTimeout(timer);}const type=response.headers.get('content-type')||'';if(!type.includes('application/json'))throw new Error('The server API is not available. Check that api/ was uploaded and deployed.');const body=await response.json();if(response.status===401){showLogin();throw new Error('Session expired. Sign in again.');}if(!response.ok)throw new Error(body.error||`Request failed (${response.status})`);return body;}
+async function request(path,options={}){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(path,{cache:'no-store',credentials:'same-origin',...options,signal:options.signal||controller.signal});
+  if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('The server API is not available. Check that api/ was uploaded and deployed.');
+  const body=await response.json();
+  if(response.status===401){showLogin();throw new Error('Session expired. Sign in again.');}
+  if(!response.ok){const e=new Error(body.error||`Request failed (${response.status})`);e.status=response.status;
+   const delay=Number(body.retryAfterSeconds||response.headers.get('retry-after'));
+   e.retryAfterSeconds=Number.isFinite(delay)&&delay>0?delay:(response.status===429?15:0);throw e;}
+  return body;
+ }catch(e){if(e.name==='AbortError')throw new Error('Refresh timed out. The current status could not be verified.');throw e;}
+ finally{clearTimeout(timer);}
+}
 function render(){if(!data)return;
  const s=data.summary||{};$('countLate').textContent=s.late??'-';$('countStart').textContent=s.notStarted??'-';$('countMissing').textContent=s.missing??'-';$('countMoving').textContent=s.movingOnTime??'-';$('onlineCount').textContent=s.online??'-';$('dayDriverCount').textContent=data.drivers.filter(d=>d.taskCountForDay>0).length;
  const notes=[...(data.warnings||[])];if(!data.complete)notes.unshift('Partial Onfleet data. On-time and missing-order conclusions may be unavailable.');if(!data.sheet.connected)notes.push('Google Sheet is not connected: missing orders cannot yet be checked.');
@@ -34,22 +48,42 @@ function renderOrders(){if(!data)return;const sheet=data.sheet||{};$('sheetState
 }
 async function load({force=false}={}){
  const now=Date.now();
- if(loading){queuedLoad=true;return;}
- if(!force&&now-lastLoadStartedAt<15000)return;
- loading=true;queuedLoad=false;lastLoadStartedAt=now;
- const mySeq=++seq;const requestDate=selected;
- $('refreshBtn').disabled=true;$('connectionState').className='source pending';$('connectionState').textContent='Checking Onfleet';$('globalError').classList.add('hidden');
+ // Never abort and replace an in-flight scan: the server may still be running it.
+ if(loading){if(selected!==activeDate)queuedLoad=true;return;}
+ const allowedAt=Math.max(retryNotBefore,lastLoadDate===selected?lastLoadStartedAt+15000:0);
+ if(now<allowedAt){
+  $('refreshBtn').disabled=true;$('refreshBtn').textContent=`Retry in ${Math.ceil((allowedAt-now)/1000)}s`;
+  clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{
+   $('refreshBtn').disabled=false;$('refreshBtn').textContent='Refresh';
+   if(!document.hidden&&!$('shell').classList.contains('hidden'))load();
+  },allowedAt-now+50);return;
+ }
+ clearTimeout(refreshTimer);
+ loading=true;queuedLoad=false;lastLoadStartedAt=now;lastLoadDate=selected;activeDate=selected;
+ const mySeq=++seq,requestDate=selected;
+ $('refreshBtn').disabled=true;$('refreshBtn').textContent='Checking...';$('connectionState').className='source pending';$('connectionState').textContent='Checking Onfleet';$('globalError').classList.add('hidden');
  try{
   const result=await request(`/api/onfleet?date=${encodeURIComponent(requestDate)}`);
   if(mySeq!==seq||requestDate!==selected)return;
   if(result.version!=='1.2.0')throw new Error('Backend is still the old version. Upload the new api/ and lib/ folders together.');
-  data=result;render();$('connectionState').className='source '+(data.complete?'good':'pending');$('connectionState').textContent=data.complete?'Onfleet checked':'Onfleet partial';$('checkedAt').textContent=`Updated ${time(data.checkedAt)}`;
+  data=result;render();$('connectionState').className='source '+(data.complete?'good':'pending');$('connectionState').textContent=data.complete?'Onfleet checked':'Onfleet partial';
+  $('checkedAt').textContent=`Onfleet observed ${time(data.sources?.onfleet?.checkedAt||data.checkedAt)}`;
  }catch(e){
+  // A quota cooldown applies to all dates, even if the user switched dates.
+  if(e.retryAfterSeconds)retryNotBefore=Math.max(retryNotBefore,Date.now()+e.retryAfterSeconds*1000);
   if(mySeq!==seq||requestDate!==selected)return;
-  if(data){$('connectionState').className='source error';$('connectionState').textContent='Refresh failed';$('checkedAt').textContent='Showing last successful data';$('globalError').textContent=e.message+' Last good data is still shown below.';$('globalError').classList.remove('hidden');}else{clearData();$('connectionState').className='source error';$('connectionState').textContent='Data unavailable';$('checkedAt').textContent='Status is unknown';$('globalError').textContent=e.message;$('globalError').classList.remove('hidden');for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Data unavailable. Tap Refresh once after a few seconds.</div>';}
+  $('connectionState').className='source error';$('connectionState').textContent=e.status===429?'Waiting for Onfleet':'Refresh failed';
+  if(data){$('checkedAt').textContent=`OLD SNAPSHOT ${time(data.sources?.onfleet?.checkedAt||data.checkedAt)} - NOT LIVE`;
+   $('globalError').textContent=e.message+' Showing the previous snapshot only; current on-time status is not verified.';
+  }else{clearData();$('checkedAt').textContent='Status is unknown';$('globalError').textContent=e.message;
+   for(const id of ['issueList','driverList','sheetList','taskList'])$(id).innerHTML='<div class="empty">Data unavailable. The app will wait before retrying; do not assume deliveries are on time.</div>';
+  }
+  $('globalError').classList.remove('hidden');
  }finally{
-  loading=false;$('refreshBtn').disabled=false;
-  if(queuedLoad){queuedLoad=false;setTimeout(()=>load(),500);}
+  loading=false;activeDate=null;$('refreshBtn').disabled=false;$('refreshBtn').textContent='Refresh';
+  // Switching dates queues exactly the last selection. Same-date Refresh taps do not.
+  if(queuedLoad&&requestDate!==selected){queuedLoad=false;load({force:true});}
+  else if(retryNotBefore>Date.now())load();
  }
 }
 function showLogin(){$('shell').classList.add('hidden');$('login').classList.remove('hidden');}

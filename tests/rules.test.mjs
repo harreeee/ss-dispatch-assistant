@@ -60,7 +60,7 @@ test('Sheet delivery with ambiguous pickups does not start wrong task',()=>{cons
 test('Empty pagination page still follows lastId',async()=>{let calls=0;const r=await readPages({from:'0'},async path=>{calls++;if(calls===1)return {tasks:[],lastId:'cursor'};assert.match(path,/lastId=cursor/);return {tasks:[pickup()]};});assert.equal(r.complete,true);assert.equal(calls,2);assert.equal(r.tasks.length,1);});
 test('Pagination truncation stays incomplete',async()=>assert.equal((await readPages({},async()=>({tasks:[],lastId:'more'}),{maxPages:1})).complete,false));
 test('Pagination repeated cursor fails rather than returns healthy',async()=>assert.rejects(()=>readPages({},async()=>({tasks:[],lastId:'again'})),/repeated/));
-test('Live adapter retrieves created-old tasks and uses tasks/all',async()=>{const paths=[];await getOnfleet(day,{useCache:false,now:at(10),request:async path=>{paths.push(path);return path.startsWith('/workers')?[]:{tasks:[]};}});assert.ok(paths.some(p=>p.startsWith('/tasks/all?')&&p.includes('from=0')&&p.includes('state=0%2C1%2C2')));});
+test('Live adapter uses bounded recent task scan rather than from=0',async()=>{const paths=[];await getOnfleet(day,{useCache:false,now:at(10),request:async path=>{paths.push(path);return path.startsWith('/workers')?[]:{tasks:[]};}});assert.ok(paths.some(p=>p.startsWith('/tasks/all?')&&!p.includes('from=0')&&p.includes('state=0%2C1%2C2')));});
 test('Provider error is not swallowed',async()=>assert.rejects(()=>getOnfleet(day,{useCache:false,request:async()=>{throw new Error('429');}}),/429/));
 const warning={id:'cutoff:1',kind:'NOT_STARTED',severity:'WATCH',dueAt:at(10)};
 test('Future due alert does not send early',()=>assert.equal(notificationPlan([warning],{},at(9,59)).due.length,0));
